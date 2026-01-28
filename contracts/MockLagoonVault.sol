@@ -18,11 +18,13 @@ contract MockLagoonVault is ERC20 {
     uint256 public totalAssetsAmount;
 
     // Async deposit requests
+    // Packed struct: address (20 bytes) + uint96 assets (12 bytes) = 32 bytes (1 slot)
+    // timestamp and claimed stored separately for gas efficiency
     struct AsyncRequest {
-        address owner;
-        uint256 assets;
-        uint256 timestamp;
-        bool claimed;
+        address owner;      // 20 bytes
+        uint96 assets;      // 12 bytes (packed with owner in same slot)
+        uint64 timestamp;   // 8 bytes
+        bool claimed;       // 1 byte (can pack with timestamp if needed)
     }
 
     mapping(uint256 => AsyncRequest) public asyncRequests;
@@ -83,7 +85,11 @@ contract MockLagoonVault is ERC20 {
         require(assets > 0, "Invalid amount");
 
         asset.safeTransferFrom(msg.sender, address(this), assets);
-        totalAssetsAmount += assets;
+        
+        // Unchecked addition - overflow protection not needed for realistic amounts
+        unchecked {
+            totalAssetsAmount += assets;
+        }
 
         // 1:1 shares for simplicity (in real vault, this would be calculated)
         shares = assets;
@@ -103,14 +109,19 @@ contract MockLagoonVault is ERC20 {
     ) external returns (uint256 requestId) {
         require(!totalAssetsValid, "Vault ready for sync deposits");
         require(assets > 0, "Invalid amount");
+        require(assets <= type(uint96).max, "Assets amount too large");
 
         asset.safeTransferFrom(controller, address(this), assets);
 
-        requestId = requestIdCounter++;
+        // Unchecked increment - counter cannot overflow in practice
+        unchecked {
+            requestId = requestIdCounter++;
+        }
+        
         asyncRequests[requestId] = AsyncRequest({
             owner: owner,
-            assets: assets,
-            timestamp: block.timestamp,
+            assets: uint96(assets),  // Safe cast after require check
+            timestamp: uint64(block.timestamp),  // Safe cast (timestamp fits in uint64)
             claimed: false
         });
 
@@ -126,14 +137,22 @@ contract MockLagoonVault is ERC20 {
         require(!request.claimed, "Already claimed");
         require(totalAssetsValid, "Vault not ready");
 
+        // Cache values in memory to avoid multiple storage reads
+        address owner = request.owner;
+        uint256 assets = uint256(request.assets);
+
         request.claimed = true;
-        totalAssetsAmount += request.assets;
+        
+        // Unchecked addition - overflow protection not needed
+        unchecked {
+            totalAssetsAmount += assets;
+        }
 
         // 1:1 shares
-        uint256 shares = request.assets;
-        _mint(request.owner, shares);
+        uint256 shares = assets;
+        _mint(owner, shares);
 
-        emit AsyncDepositClaimed(requestId, request.owner, shares);
+        emit AsyncDepositClaimed(requestId, owner, shares);
     }
 
     /**

@@ -24,3 +24,4 @@ Thumbs.db
 # Deployment files (keep abis, but ignore deployment addresses)
 deployments/
 !abis/
+package-lock.json
