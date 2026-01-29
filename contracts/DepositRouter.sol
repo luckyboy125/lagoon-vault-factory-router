@@ -33,7 +33,7 @@ contract DepositRouter is EIP712, Ownable {
 
     bytes32 public constant DEPOSIT_INTENT_TYPEHASH =
         keccak256(
-            "DepositIntent(address user,address vault,address asset,uint256 amount,uint256 nonce,uint256 deadline,address kolAddress)"
+            "DepositIntent(address user,address vault,address asset,address kolAddress,uint256 amount,uint256 nonce,uint256 deadline)"
         );
 
     struct DepositIntent {
